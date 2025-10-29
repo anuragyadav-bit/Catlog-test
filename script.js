@@ -1,48 +1,64 @@
-const fs = require("fs");
+import fs from "fs";
 
-function lagrangeAtZero(x, y) {
-  let k = x.length;
+function bigIntFromBase(str, base) {
+  const digits = "0123456789abcdefghijklmnopqrstuvwxyz";
   let result = 0n;
-
-  for (let i = 0; i < k; i++) {
-    let numerator = 1n;
-    let denominator = 1n;
-
-    for (let j = 0; j < k; j++) {
-      if (i === j) continue;
-      numerator *= BigInt(-x[j]);
-      denominator *= BigInt(x[i] - x[j]);
-    }
-
-    let li = numerator / denominator;
-    result += y[i] * li;
+  for (const ch of str.toLowerCase()) {
+    const digit = BigInt(digits.indexOf(ch));
+    result = result * BigInt(base) + digit;
   }
   return result;
 }
 
-function findSecretFromJSON(fileName) {
+function lagrangeAtZero(x, y) {
+  const k = x.length;
+  let result = 0n;
+  for (let i = 0; i < k; i++) {
+    let num = 1n;
+    let den = 1n;
+    const xi = BigInt(x[i]);
+    for (let j = 0; j < k; j++) {
+      if (i === j) continue;
+      const xj = BigInt(x[j]);
+      num *= -xj;
+      den *= xi - xj;
+    }
+    result += y[i] * (num / den);
+  }
+  return result;
+}
+
+function getPointsFromJSON(fileName) {
   const data = JSON.parse(fs.readFileSync(fileName, "utf8"));
   const n = data.keys.n;
   const k = data.keys.k;
-
   const x = [];
   const y = [];
 
-  Object.keys(data).forEach((key) => {
-    if (key === "keys") return;
-    const point = data[key];
-    const base = parseInt(point.base);
-    const value = point.value;
-    const decodedY = BigInt(parseInt(value, base));
+  for (const [key, value] of Object.entries(data)) {
+    if (key === "keys") continue;
+    const base = parseInt(value.base);
+    const yDecoded = bigIntFromBase(value.value, base);
     x.push(parseInt(key));
-    y.push(decodedY);
-  });
+    y.push(yDecoded);
+  }
 
-  const xk = x.slice(0, k);
-  const yk = y.slice(0, k);
+  const points = x.map((val, i) => ({ x: val, y: y[i] }))
+    .sort((a, b) => a.x - b.x)
+    .slice(0, k);
 
-  const secret = lagrangeAtZero(xk, yk);
-  console.log(secret.toString());
+  return { x: points.map(p => p.x), y: points.map(p => p.y) };
 }
 
-findSecretFromJSON("testcase.json");
+function findSecret(fileName) {
+  const { x, y } = getPointsFromJSON(fileName);
+  const secret = lagrangeAtZero(x, y);
+
+  const mod = 2n ** 256n;
+  const positiveSecret = ((secret % mod) + mod) % mod;
+
+  console.log("Secret for", fileName, "=>", positiveSecret.toString());
+}
+
+findSecret("testcase1.json");
+findSecret("testcase2.json");
